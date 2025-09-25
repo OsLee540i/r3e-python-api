@@ -5,7 +5,7 @@ import json
 import struct
 import pkg_resources
 
-# ---- Größen-/Typ-Tabellen ----------------------------------------------------
+
 SIZES = {
     'Int32': 4, 'Int16': 2, 'Int8': 1,
     'Float32': 4, 'Float64': 8,
@@ -17,7 +17,7 @@ SIZES = {
     'byte': 1, 'sbyte': 1, 'char': 2, 'string': 4, 'void': 0,
 }
 
-# struct.pack/unpack Codes (Achtung: Float32/Float64 müssen 'f'/'d' sein!)
+
 STRUCT_TYPES = {
     'Single': 'f', 'Double': 'd',
     'Int32': 'i', 'Int16': 'h', 'Int8': 'b',
@@ -32,14 +32,14 @@ STRUCT_TYPES = {
     'byte': 'B', 'sbyte': 'b', 'char': 'c', 'string': 's', 'void': 'x',
 }
 
-# ---- Quelle der data.cs festlegen -------------------------------------------
+
 ENV_DATA_CS = os.getenv("R3E_DATA_CS")
 if ENV_DATA_CS and os.path.isfile(ENV_DATA_CS):
     DATA_FILE = ENV_DATA_CS
 else:
     DATA_FILE = pkg_resources.resource_filename('r3e_api', 'data/data.cs')
 
-# ---- Parser: C#-Struct-Layout einlesen --------------------------------------
+
 def replace_if_equals(string, old, new):
     return new if string == old else string
 
@@ -97,7 +97,7 @@ def unflatten_struct_data(data, positions):
                 size = get_child_amount(ch)
                 out.append(unflatten_struct_data(data[i:i+size], ch))
                 i += size
-            # Byte-Arrays als UTF-8-String zurückgeben
+
             if positions['type'].startswith('byte'):
                 out = _bytes_to_utf8(out)
             return out
@@ -113,13 +113,7 @@ def unflatten_struct_data(data, positions):
         return data[0] if (isinstance(data, (list, tuple)) and len(data) == 1) else data
 
 def read_struct_positions(data_lines, struct_name, generic_type=None, start=0):
-    """
-    Liest die Feld-Offets eines Structs aus C#-Code und gibt einen Positionsbaum zurück:
-    {
-        'start': int, 'end': int, 'type': str,
-        'children': { name -> child }  oder  Liste bei Arrays
-    }
-    """
+
     if struct_name in STRUCT_TYPES:
         return {'start': start, 'end': SIZES[struct_name] + start, 'type': struct_name}
 
@@ -155,14 +149,14 @@ def read_struct_positions(data_lines, struct_name, generic_type=None, start=0):
             elif generic_var_name:
                 line_type = replace_if_equals(line_type, generic_var_name, generic_type)
 
-            # Fester Array-Block: [MarshalAs(UnmanagedType.ByValArray, SizeConst = N)]
+
             if '[' in line_type:
                 line_type = line_type.split('[')[0]
 
                 if i == 0:
                     raise Exception(f'Error identifying array length of field {line_name} in struct {struct_name}')
 
-                # Robuste Erkennung (Whitespace egal)
+
                 prev_line = data_lines[i - 1].strip()
                 if '[MarshalAs(UnmanagedType.ByValArray' not in prev_line:
                     raise Exception(f'Error identifying array length of field {line_name} in struct {struct_name}')
@@ -185,7 +179,7 @@ def read_struct_positions(data_lines, struct_name, generic_type=None, start=0):
                 res['end'] = children[line_name]['end']
                 continue
 
-            # Normales Feld / Sub-Struct
+
             children[line_name] = read_struct_positions(data_lines, line_type, sub_type, before)
             before += children[line_name]['end'] - children[line_name]['start']
             res['end'] = children[line_name]['end']
@@ -197,7 +191,7 @@ def read_struct_positions(data_lines, struct_name, generic_type=None, start=0):
 def convert(infile, outfile=None):
     with open(infile, 'r', encoding='utf-8', errors='ignore') as f:
         data = f.read()
-    # Whitespace konsolidieren (Tabs entfernen ist ok, Array-Erkennung nutzt .strip())
+
     data = re.sub(r'\n\s+', '\n', data).replace('\t', '').replace('\r', '').split('\n')
     res = read_struct_positions(data, 'Shared')
     if outfile:
@@ -209,13 +203,13 @@ def get_value(data, field):
     for field_name in field.split('.'):
         if field_name not in positions['children']:
             try:
-                field_name = int(field_name)  # Array-Index
+                field_name = int(field_name)  
             except Exception:
                 raise Exception('Field ' + field_name + ' not found in struct ' + positions['type'])
         positions = positions['children'][field_name]
     return read_data_from_struct(data, positions)
 
-# ---- Shared Memory Reader ----------------------------------------------------
+
 class R3ESharedMemory:
     def __init__(self):
         self._mmap_data = None
